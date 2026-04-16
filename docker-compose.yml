@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  meshwar-map:
+    build: .
+    container_name: meshwar-map
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./tools:/app/tools
+    environment:
+      - PORT=3000
+      - ALLOW_UPLOAD=false    # Set to 'true' to enable app uploads
+      - DB_PATH=/app/data/meshwar.db
+    restart: unless-stopped
