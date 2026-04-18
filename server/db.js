@@ -44,22 +44,13 @@ function initSchema() {
   d.exec(`CREATE INDEX IF NOT EXISTS idx_samples_sample_id ON samples (sample_id)`);
 }
 
-// Expiry: 90 days
-const EXPIRY_DAYS = 90;
-
-function ageInDays(timestamp) {
-  const now = new Date();
-  const sample = new Date(timestamp);
-  return Math.floor((now - sample) / (1000 * 60 * 60 * 24));
-}
-
 /**
  * Get aggregated coverage data in the same format as the Cloudflare version.
  * Returns { coverage: { geohash: { received, lost, samples, repeaters, lastUpdate, appVersion } } }
  */
 function getCoverage() {
   const d = getDb();
-  const cutoff = new Date(Date.now() - EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = '1970-01-01T00:00:00.000Z';
   
   // Get all non-expired samples with actual ping data
   const rows = d.prepare(`
@@ -195,41 +186,79 @@ function insertSamples(samples, contributor = null, region = null) {
 }
 
 /**
- * Get contributor statistics for leaderboard.
+ * Calculates discovery credit. A discovery is awarded to the contributor
+ * who uploaded the EARLIEST timestamped sample for a specific node_id.
  */
-function getContributorStats() {
-  const d = getDb();
-  const cutoff = new Date(Date.now() - EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  
-  const rows = d.prepare(`
-    SELECT 
-      COALESCE(contributor, 'Anonymous') as name,
-      COUNT(*) as total_samples,
-      SUM(CASE WHEN ping_success = 1 THEN 1 ELSE 0 END) as successes,
-      SUM(CASE WHEN ping_success = 0 THEN 1 ELSE 0 END) as failures,
-      COUNT(DISTINCT geohash) as unique_cells,
-      MIN(timestamp) as first_seen,
-      MAX(timestamp) as last_seen,
-      COUNT(DISTINCT import_date) as import_count
-    FROM samples
-    WHERE timestamp > ?
-    GROUP BY COALESCE(contributor, 'Anonymous')
-    ORDER BY total_samples DESC
-  `).all(cutoff);
-  
-  return rows.map(r => ({
-    name: r.name,
-    totalSamples: r.total_samples,
-    successes: r.successes,
-    failures: r.failures,
-    successRate: r.total_samples > 0 
-      ? ((r.successes / r.total_samples) * 100).toFixed(1) 
-      : '0.0',
-    uniqueCells: r.unique_cells,
-    firstSeen: r.first_seen,
-    lastSeen: r.last_seen,
-    importCount: r.import_count,
-  }));
+function getRepeaterDiscoveryStats() {
+    const d = getDb();
+    return d.prepare(`
+        WITH FirstDiscovery AS (
+            SELECT 
+                node_id, 
+                contributor,
+                MIN(timestamp) as first_time
+            FROM samples
+            WHERE node_id IS NOT NULL
+            GROUP BY node_id
+        )
+        SELECT 
+            COALESCE(contributor, 'Anonymous') as name, 
+            COUNT(node_id) as discoveredCount
+        FROM FirstDiscovery
+        GROUP BY name
+    `).all();
+}
+
+/**
+ * Get stats per contributor. 
+ * If days is 0, it fetches Lifetime data.
+ */
+function getContributorStats(days = 0) {
+    const d = getDb();
+    
+    let cutoff;
+    if (days > 0) {
+        cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    } else {
+        cutoff = '1970-01-01T00:00:00.000Z'; // Lifetime
+    }
+
+    const rows = d.prepare(`
+        SELECT 
+            COALESCE(contributor, 'Anonymous') as name,
+            COUNT(*) as total_samples,
+            SUM(CASE WHEN ping_success = 1 THEN 1 ELSE 0 END) as successes,
+            SUM(CASE WHEN ping_success = 0 THEN 1 ELSE 0 END) as failures,
+            COUNT(DISTINCT geohash) as unique_cells,
+            MIN(timestamp) as first_seen,
+            MAX(timestamp) as last_seen,
+            COUNT(DISTINCT import_date) as import_count
+        FROM samples
+        WHERE timestamp > ?
+        GROUP BY COALESCE(contributor, 'Anonymous')
+        ORDER BY total_samples DESC
+    `).all(cutoff);
+
+    // Get the discovery trophies
+    const discoveries = getRepeaterDiscoveryStats();
+
+    return rows.map(r => {
+        const discoveryEntry = discoveries.find(disc => disc.name === r.name);
+        return {
+            name: r.name,
+            totalSamples: r.total_samples,
+            successes: r.successes,
+            failures: r.failures,
+            successRate: r.total_samples > 0 
+                ? ((r.successes / r.total_samples) * 100).toFixed(1) 
+                : '0.0',
+            uniqueCells: r.unique_cells,
+            discoveredRepeaters: discoveryEntry ? discoveryEntry.discoveredCount : 0,
+            firstSeen: r.first_seen,
+            lastSeen: r.last_seen,
+            importCount: r.import_count,
+        };
+    });
 }
 
 /**
