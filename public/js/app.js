@@ -758,6 +758,11 @@ async function loadData() {
             // Update node count from actual loaded data
             updateNodeCount();
 
+            if (document.getElementById('toggle-repeaters').checked) {
+        showRepeaters = true;
+        updateRepeaterMarkers(aggregateAtPrecision(cachedCoverage, parseInt(document.getElementById('resolution-selector').value)));
+    }
+
             if (timelapseActive) initTimelapse();
             scheduleRender();
             return;
