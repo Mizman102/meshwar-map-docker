@@ -62,7 +62,10 @@ const map = L.map('map', {
     worldCopyJump: false,
     maxBounds: [[-90, -180], [90, 180]],
     maxBoundsViscosity: 1.0
+    zoomControl: false
 });
+
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
 // Popup scroll handling
 map.on('popupopen', (e) => {
@@ -754,6 +757,11 @@ async function loadData() {
 
             // Update node count from actual loaded data
             updateNodeCount();
+
+            if (document.getElementById('toggle-repeaters').checked) {
+        showRepeaters = true;
+        updateRepeaterMarkers(aggregateAtPrecision(cachedCoverage, parseInt(document.getElementById('resolution-selector').value)));
+    }
 
             if (timelapseActive) initTimelapse();
             scheduleRender();
