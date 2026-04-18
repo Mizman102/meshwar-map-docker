@@ -141,7 +141,7 @@ function getCoverage() {
  */
 function insertSamples(samples, contributor = null, region = null) {
   const d = getDb();
-  const importDate = new Date().toISOString().split('T')[0];
+  const importDate = new Date().toISOString();
   
   const insert = d.prepare(`
     INSERT OR IGNORE INTO samples 
