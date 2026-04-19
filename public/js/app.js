@@ -62,7 +62,10 @@ const map = L.map('map', {
     worldCopyJump: false,
     maxBounds: [[-90, -180], [90, 180]],
     maxBoundsViscosity: 1.0
+    zoomControl: false
 });
+
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
 // Popup scroll handling
 map.on('popupopen', (e) => {

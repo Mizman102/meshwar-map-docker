@@ -80,7 +80,9 @@ app.get('/api/stats', (req, res) => {
 // Contributor leaderboard
 app.get('/api/contributors', (req, res) => {
   try {
-    const contributors = db.getContributorStats();
+    // Get 'days' from the query string, default to 0 (Lifetime)
+    const days = parseInt(req.query.days) || 0;
+    const contributors = db.getContributorStats(days);
     res.json({ contributors });
   } catch (err) {
     res.status(500).json({ error: err.message });
